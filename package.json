@@ -1,0 +1,53 @@
+{
+  "name": "interactive-restaurantes",
+  "version": "1.0.0",
+  "description": "Sistema completo de restaurantes interativos com módulos de anúncios e IA",
+  "main": "index.js",
+  "scripts": {
+  "start": "concurrently \"npm run start:backend\" \"npm run start:admin\" \"npm run start:ads\" \"npm run start:client-web\" \"npm run start:client-app\"",
+  "start:backend": "cd backend && npm start",
+  "start:admin": "cd admin-panel && npm start",
+  "start:ads": "cd ads-module && npm start",
+  "start:client-web": "cd client-web && npm run dev",
+  "start:client-app": "cd client-app/ClientApp && npm start",
+  "dev": "concurrently \"npm run dev:backend\" \"npm run dev:admin\" \"npm run dev:ads\" \"npm run dev:client-web\" \"npm run dev:client-app\"",
+  "dev:backend": "cd backend && npm run dev",
+  "dev:admin": "cd admin-panel && npm start",
+  "dev:ads": "cd ads-module && npm run dev",
+  "dev:client-web": "cd client-web && npm run dev",
+  "dev:client-app": "cd client-app/ClientApp && npm start",
+    "install:all": "npm install --workspaces",
+  "build": "cd admin-panel && npm run build && cd client-web && npm run build && cd ../client-app/ClientApp && npm run build",
+    "test": "npm run test:backend && npm run test:admin && npm run test:ads",
+    "test:backend": "cd backend && npm test",
+    "test:admin": "cd admin-panel && npm test",
+    "test:ads": "cd ads-module && npm test"
+  },
+  "keywords": [
+    "restaurant",
+    "ads",
+    "ai",
+    "interactive",
+    "mozambique"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.11",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^8.2.2",
+    "playwright": "^1.48.2",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.13"
+  },
+  "workspaces": [
+    "backend",
+    "admin-panel",
+    "ads-module",
+    "ai-module"
+  ],
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.0.2",
+    "vite": "^7.1.5"
+  }
+}

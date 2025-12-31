@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  admin-panel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Valores padrão; pode sobrescrever via .env ou linha de comando
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3000}
+    image: admin-panel:latest
+    ports:
+      - "8080:80"  # http://localhost:8080
+    # Observação: Vite injeta as vars no build. Se mudar, recompile (docker compose build).
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:3000/api}
+      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:3000}
+    restart: unless-stopped

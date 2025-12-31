@@ -1,0 +1,11 @@
+diff --git a/node_modules/react-native-audio-recorder-player/android/build.gradle b/node_modules/react-native-audio-recorder-player/android/build.gradle
+index 882296d..ffae755 100644
+--- a/node_modules/react-native-audio-recorder-player/android/build.gradle
++++ b/node_modules/react-native-audio-recorder-player/android/build.gradle
+@@ -125,6 +125,5 @@ dependencies {
+   implementation "com.facebook.react:react-android"
+   implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+   implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+-  implementation project(":react-native-nitro-modules")
+ }
+ 

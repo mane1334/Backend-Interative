@@ -1,0 +1,74 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-restaurantes}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-restaurantes}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      NODE_ENV: development
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      DB_NAME: ${DB_NAME:-restaurantes}
+      DB_HOST: db
+      DB_PORT: 5432
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+  admin-panel:
+    build:
+      context: .
+      dockerfile: admin-panel/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:3000}
+    depends_on:
+      - backend
+    ports:
+      - "3001:80"
+
+  client-web:
+    build:
+      context: ./client-web
+      args:
+        VITE_BASE_URL: ${VITE_BASE_URL:-http://localhost:3000}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+    depends_on:
+      - backend
+    environment:
+      # Runtime WebSocket URL used by nginx envsubst to inject into HTML
+      WS_URL: ${WS_URL:-ws://host.docker.internal:3000}
+    ports:
+      - "3002:80"
+
+  ads-module:
+    build:
+      context: ./ads-module
+    environment:
+      ADS_PORT: 3003
+    ports:
+      - "3003:3003"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:

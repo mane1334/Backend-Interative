@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  admin-panel:
+    image: ghcr.io/mane1334/admin-panel:latest
+    ports:
+      - "${PORT:-8080}:80"  # Acesse em http://localhost:${PORT:-8080}
+    restart: unless-stopped
+
+# Observações:
+# - Esta composição usa a imagem já publicada no GHCR.
+# - Para imagens privadas, faça login antes: echo {{GHCR_PAT}} | docker login ghcr.io -u mane1334 --password-stdin
+# - As variáveis VITE_API_URL/VITE_WS_URL são definidas em build-time; mudar o destino exige rebuild da imagem.
