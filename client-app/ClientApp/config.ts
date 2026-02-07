@@ -15,7 +15,8 @@ const DEFAULT_HOST = Platform.select({
 const HOST = Config.HOST || DEFAULT_HOST; // Prioritize env var, fallback to default
 const PORT = 3000;
 
-export const API_URL = `http://${HOST}:${PORT}/api`;
+export const BASE_URL = `http://${HOST}:${PORT}`;
+export const API_URL = `${BASE_URL}/api`;
 export const WS_URL = `ws://${HOST}:${PORT}`;
 
 

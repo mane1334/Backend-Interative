@@ -13,8 +13,10 @@ const WS_URL = import.meta.env.VITE_WS_URL || `${_PROTOCOL === 'https:' ? 'wss' 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: FiGrid },
   { path: '/current-orders', label: 'Pedidos Atuais', icon: FiShoppingCart },
+  { path: '/waiter-calls', label: 'Chamadas Garçom', icon: FiBell },
   { path: '/orders', label: 'Histórico', icon: FiClock },
-  { path: '/menu', label: 'Cardápio', icon: FiList },
+  { path: '/categories', label: 'Categorias', icon: FiList },
+  { path: '/menu', label: 'Pratos', icon: FiList },
   { path: '/ads', label: 'Anúncios', icon: FiBell },
   { path: '/ratings', label: 'Avaliações', icon: FiStar },
   { path: '/settings', label: 'Configurações', icon: FiSettings },
@@ -61,6 +63,7 @@ export default function AdminLayout() {
   const [settings, setSettings] = useState(null);
   const [locked, setLocked] = useState(false);
   const [pinInput, setPinInput] = useState('');
+  const [pendingCalls, setPendingCalls] = useState(0);
   const location = useLocation();
   const title = usePageTitle(location.pathname);
 
@@ -84,7 +87,23 @@ export default function AdminLayout() {
       setNotification({ text: `Novo pedido da mesa ${payload.table_number}!`, type: 'info' });
     });
     const unsubCall = subscribeToEvent('CALL_WAITER', (payload) => {
-      setNotification({ text: `Mesa ${payload.table_number} chamando!`, type: 'warning' });
+      setNotification({ text: `Mesa ${payload.table_number} chamando: ${payload.reason || 'Garçom'}!`, type: 'warning' });
+      setPendingCalls(prev => prev + 1);
+      // Som de alerta para chamada de garçom
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'square'; o.frequency.setValueAtTime(660, ctx.currentTime);
+        g.gain.setValueAtTime(0.0001, ctx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+        o.start();
+        setTimeout(() => { g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.08); o.stop(ctx.currentTime + 0.1); }, 250);
+      } catch { }
+    });
+    const unsubCallResolved = subscribeToEvent('WAITER_CALL_RESOLVED', () => {
+      setPendingCalls(prev => Math.max(0, prev - 1));
     });
     const unsubPrep = subscribeToEvent('PREP_TIME_UPDATE', (payload) => {
       setNotification({ text: `Tempo de preparo ajustado para o pedido #${payload.order_id}`, type: 'info' });
@@ -98,7 +117,7 @@ export default function AdminLayout() {
         g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
         o.start();
         setTimeout(() => { g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05); o.stop(ctx.currentTime + 0.06); }, 200);
-      } catch {}
+      } catch { }
     });
     const unsubCancel = subscribeToEvent('ORDER_CANCELLED', (payload) => {
       setNotification({ text: `Pedido #${payload.id} foi cancelado.`, type: 'warning' });
@@ -112,7 +131,7 @@ export default function AdminLayout() {
         g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.01);
         o.start();
         setTimeout(() => { g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.1); o.stop(ctx.currentTime + 0.12); }, 300);
-      } catch {}
+      } catch { }
     });
     // Listener para toasts globais
     const onToast = (e) => {
@@ -123,13 +142,13 @@ export default function AdminLayout() {
     };
     window.addEventListener('admin:toast', onToast);
 
-    return () => { unsubNew(); unsubCall(); unsubPrep(); unsubCancel(); window.removeEventListener('admin:toast', onToast); };
+    return () => { unsubNew(); unsubCall(); unsubCallResolved(); unsubPrep(); unsubCancel(); window.removeEventListener('admin:toast', onToast); };
   }, []);
 
   useEffect(() => {
     try {
       localStorage.setItem('admin_sidebar_open', sidebarOpen ? '1' : '0');
-    } catch {}
+    } catch { }
   }, [sidebarOpen]);
 
   useEffect(() => {
@@ -142,9 +161,8 @@ export default function AdminLayout() {
       <Notification message={notification?.text} type={notification?.type || 'success'} onClear={() => setNotification(null)} />
 
       {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-white shadow-md transition-transform duration-200 ease-in-out ${
-        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <aside className={`fixed inset-y-0 left-0 z-30 w-64 transform bg-white shadow-md transition-transform duration-200 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
         <div className="h-16 flex items-center px-6 border-b">
           <span className="text-xl font-bold text-brand-600">Admin</span>
         </div>
@@ -154,15 +172,19 @@ export default function AdminLayout() {
               key={path}
               to={path}
               className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                  isActive
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-gray-700 hover:bg-gray-100'
+                `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${isActive
+                  ? 'bg-brand-50 text-brand-700'
+                  : 'text-gray-700 hover:bg-gray-100'
                 }`
               }
             >
               <Icon className="w-5 h-5" />
-              <span className="font-medium">{label}</span>
+              <span className="font-medium flex-1">{label}</span>
+              {path === '/waiter-calls' && pendingCalls > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                  {pendingCalls}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
@@ -208,7 +230,7 @@ export default function AdminLayout() {
                 return (
                   <button
                     className="inline-flex items-center justify-center px-3 py-2 rounded-md bg-red-600 text-white hover:bg-red-700"
-                    onClick={() => { setLocked(true); sessionStorage.setItem('admin_locked','1'); }}
+                    onClick={() => { setLocked(true); sessionStorage.setItem('admin_locked', '1'); }}
                     aria-label="Bloquear tela"
                   >
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -238,7 +260,7 @@ export default function AdminLayout() {
               <div className="flex justify-end gap-2">
                 <button
                   className="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-                  onClick={() => { setPinInput(''); setLocked(true); sessionStorage.setItem('admin_locked','1'); }}
+                  onClick={() => { setPinInput(''); setLocked(true); sessionStorage.setItem('admin_locked', '1'); }}
                 >
                   Cancelar
                 </button>

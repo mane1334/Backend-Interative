@@ -38,45 +38,45 @@ const readPersistedStatuses = () => {
   }
 };
 
-  const writePersistedStatus = (orderId, status) => {
+const writePersistedStatus = (orderId, status) => {
+  try {
+    const map = readPersistedStatuses();
+    if (status == null) {
+      delete map[orderId];
+    } else {
+      map[orderId] = status;
+    }
+    sessionStorage.setItem('adminOrderStatuses', JSON.stringify(map));
+  } catch (e) {
+    // ignore storage errors
+  }
+};
+
+const OrderManagement = () => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('pending'); // Default filter
+  const [actionMessage, setActionMessage] = useState(null);
+  const [editingPrep, setEditingPrep] = useState({}); // { [orderId]: minutesString }
+  const [undoableCompletions, setUndoableCompletions] = useState(new Set()); // order IDs that can be undone
+
+  const fetchOrders = async (status) => {
+    setLoading(true);
     try {
-      const map = readPersistedStatuses();
-      if (status == null) {
-        delete map[orderId];
-      } else {
-        map[orderId] = status;
+      const url = status && status !== 'all' ? `${API_URL}/orders?status=${status}` : `${API_URL}/orders`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Erro ao buscar pedidos.');
       }
-      sessionStorage.setItem('adminOrderStatuses', JSON.stringify(map));
-    } catch (e) {
-      // ignore storage errors
+      const data = await response.json();
+      setOrders(data.orders);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
-
-  const OrderManagement = () => {
-    const [orders, setOrders] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const [filterStatus, setFilterStatus] = useState('pending'); // Default filter
-    const [actionMessage, setActionMessage] = useState(null);
-    const [editingPrep, setEditingPrep] = useState({}); // { [orderId]: minutesString }
-    const [undoableCompletions, setUndoableCompletions] = useState(new Set()); // order IDs that can be undone
-
-    const fetchOrders = async (status) => {
-      setLoading(true);
-      try {
-        const url = status && status !== 'all' ? `${API_URL}/orders?status=${status}` : `${API_URL}/orders`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error('Erro ao buscar pedidos.');
-        }
-        const data = await response.json();
-        setOrders(data.orders);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
 
   useEffect(() => {
     fetchOrders(filterStatus);
@@ -103,12 +103,12 @@ const readPersistedStatuses = () => {
     };
   }, [filterStatus]);
 
-  const handleStatusChange = async (orderId, newStatus) => {
+  const handleStatusChange = async (orderId, newStatus, reason = null) => {
     try {
       const response = await fetch(`${API_URL}/orders/${orderId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, cancellation_reason: reason }),
       });
       if (!response.ok) {
         throw new Error('Erro ao atualizar status do pedido.');
@@ -140,7 +140,8 @@ const readPersistedStatuses = () => {
 
   const handleCancelOrder = (orderId) => {
     if (window.confirm('Tem certeza que deseja cancelar este pedido? Esta ação não pode ser desfeita.')) {
-      handleStatusChange(orderId, 'cancelled');
+      const reason = window.prompt('Motivo do cancelamento (opcional):');
+      handleStatusChange(orderId, 'cancelled', reason);
     }
   };
 
@@ -239,12 +240,11 @@ const readPersistedStatuses = () => {
                   <p className="text-sm text-gray-600">Mesa {order.table_number}</p>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                     order.status === 'preparing' ? 'bg-blue-100 text-blue-800' :
-                    order.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
+                      order.status === 'completed' ? 'bg-green-100 text-green-800' :
+                        'bg-red-100 text-red-800'
+                    }`}>
                     {statusLabel(order.status)}
                   </span>
                 </div>

@@ -1,0 +1,26 @@
+{
+  "name": "ads-module",
+  "version": "1.0.0",
+  "description": "Módulo de gerenciamento de anúncios para restaurantes",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "jest"
+  },
+  "keywords": ["ads", "restaurant", "advertising", "promotions"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.1",
+    "pg": "^8.16.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "jest": "^29.7.0"
+  }
+}

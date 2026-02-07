@@ -32,10 +32,10 @@ const initSQLite = () => {
     const dbPath = path.join(__dirname, 'database.sqlite');
     sqliteDb = new sqlite3.Database(dbPath);
     console.log('✅ SQLite inicializado');
-    
+
     // Criar tabelas se não existirem
     createSQLiteTables();
-    
+
     return true;
   } catch (error) {
     console.error('❌ Erro ao inicializar SQLite:', error.message);
@@ -47,22 +47,22 @@ const initSQLite = () => {
 const createSQLiteTables = () => {
   const tables = [
     `CREATE TABLE IF NOT EXISTS categories (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      name TEXT NOT NULL UNIQUE,\n      description TEXT,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
-    
-    `CREATE TABLE IF NOT EXISTS dishes (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      name TEXT NOT NULL,\n      description TEXT,\n      price REAL NOT NULL,\n      category_id INTEGER,\n      image_url TEXT,\n      is_available INTEGER DEFAULT 1,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
-    
+
+    `CREATE TABLE IF NOT EXISTS dishes (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      name TEXT NOT NULL,\n      description TEXT,\n      price REAL NOT NULL,\n      category_id INTEGER,\n      image_url TEXT,\n      is_available INTEGER DEFAULT 1,\n      preparation_time INTEGER,\n      calories INTEGER,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
+
     `CREATE TABLE IF NOT EXISTS orders (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      table_number INTEGER NOT NULL,\n      status TEXT NOT NULL DEFAULT 'pending',\n      total_price REAL,\n      prep_time_seconds INTEGER,\n      cancel_until DATETIME,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
-    
+
     `CREATE TABLE IF NOT EXISTS order_items (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      order_id INTEGER,\n      dish_id INTEGER,\n      quantity INTEGER NOT NULL DEFAULT 1,\n      item_price REAL NOT NULL\n    )`,
-    
+
     `CREATE TABLE IF NOT EXISTS users (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      username TEXT NOT NULL UNIQUE,\n      password_hash TEXT NOT NULL,\n      role TEXT NOT NULL DEFAULT 'waiter',\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
-    
+
     `CREATE TABLE IF NOT EXISTS advertisements (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      title TEXT NOT NULL,\n      content TEXT,\n      image_url TEXT,\n      start_date DATE NOT NULL,\n      end_date DATE NOT NULL,\n      is_active INTEGER DEFAULT 1,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
-    
+
     `CREATE TABLE IF NOT EXISTS ratings (\n      id INTEGER PRIMARY KEY AUTOINCREMENT,\n      dish_id INTEGER,\n      order_id INTEGER,\n      rating INTEGER NOT NULL,\n      comment TEXT,\n      created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`,
-    
+
     `CREATE TABLE IF NOT EXISTS settings (\n      key TEXT PRIMARY KEY,\n      value TEXT,\n      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP\n    )`
   ];
-  
+
   tables.forEach(tableSQL => {
     sqliteDb.run(tableSQL, (err) => {
       if (err) {
@@ -70,7 +70,7 @@ const createSQLiteTables = () => {
       }
     });
   });
-  
+
   // Inserir dados básicos
   const insertDefaults = () => {
     // Inserir categorias básicas
@@ -80,22 +80,54 @@ const createSQLiteTables = () => {
       ['Sobremesas', 'Doces para finalizar'],
       ['Bebidas', 'Bebidas variadas']
     ];
-    
+
     categories.forEach(([name, description]) => {
       sqliteDb.run(
         'INSERT OR IGNORE INTO categories (name, description) VALUES (?, ?)',
         [name, description]
       );
     });
-    
+
     // Inserir configuração padrão
     sqliteDb.run(
       "INSERT OR IGNORE INTO settings (key, value) VALUES ('restaurant_name', 'Restaurante Gêmeos')"
     );
   };
-  
+
   insertDefaults();
+
+  // Executar migrações
+  migrateTables();
+
   console.log('✅ Tabelas SQLite criadas/verificadas');
+};
+
+// Função para migrar tabelas (adicionar colunas novas em bancos existentes)
+const migrateTables = () => {
+  // Migração para tabela dishes (Adicionar preparation_time e calories)
+  sqliteDb.all("PRAGMA table_info(dishes)", (err, rows) => {
+    if (err) {
+      console.error('Erro ao verificar esquema da tabela dishes:', err);
+      return;
+    }
+
+    const hasPrepTime = rows.some(row => row.name === 'preparation_time');
+    const hasCalories = rows.some(row => row.name === 'calories');
+
+    if (!hasPrepTime) {
+      console.log('🔄 Migrando: Adicionando column preparation_time em dishes...');
+      sqliteDb.run("ALTER TABLE dishes ADD COLUMN preparation_time INTEGER", (err) => {
+        if (err) console.error('Erro ao adicionar preparation_time:', err);
+      });
+    }
+
+    if (!hasCalories) {
+      console.log('🔄 Migrando: Adicionando column calories em dishes...');
+      sqliteDb.run("ALTER TABLE dishes ADD COLUMN calories INTEGER", (err) => {
+        if (err) console.error('Erro ao adicionar calories:', err);
+      });
+    }
+  });
 };
 
 // Função para converter query PostgreSQL para SQLite
@@ -141,7 +173,7 @@ const convertQuery = (text, params) => {
 // Função de query unificada
 const query = async (text, params = []) => {
   const { text: convertedText, params: convertedParams } = convertQuery(text, params);
-  
+
   if (dbType === 'postgresql' && pool) {
     try {
       const result = await pool.query(convertedText, convertedParams);
@@ -169,13 +201,13 @@ const query = async (text, params = []) => {
           }
         });
       } else {
-        sqliteDb.run(convertedText, convertedParams, function(err) {
+        sqliteDb.run(convertedText, convertedParams, function (err) {
           if (err) {
             reject(err);
           } else {
-            resolve({ 
-              rows: [{ id: this.lastID }], 
-              rowCount: this.changes 
+            resolve({
+              rows: [{ id: this.lastID }],
+              rowCount: this.changes
             });
           }
         });

@@ -10,6 +10,11 @@ CREATE TABLE IF NOT EXISTS dishes (
     category_id INTEGER,
     image_url VARCHAR(500),
     is_available BOOLEAN DEFAULT 1,
+    preparation_time INTEGER,
+    calories INTEGER,
+    is_spicy BOOLEAN DEFAULT 0,
+    is_vegetarian BOOLEAN DEFAULT 0,
+    is_gluten_free BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -75,3 +80,37 @@ INSERT OR IGNORE INTO dishes (name, description, price, category_id, is_availabl
 ('Coca-Cola', 'Refrigerante 350ml', 5.00, 4, 1),
 ('Água Mineral', 'Água mineral 500ml', 3.00, 4, 1),
 ('Suco de Laranja', 'Suco natural de laranja', 6.00, 4, 1);
+
+-- Tabela de chamadas de garçom
+CREATE TABLE IF NOT EXISTS waiter_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    table_number INTEGER NOT NULL,
+    reason VARCHAR(100) NOT NULL DEFAULT 'Chamado Geral',
+    status VARCHAR(50) DEFAULT 'pending',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de usuários (Admin)
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'admin',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Categorias
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Inserir categorias padr�o
+INSERT OR IGNORE INTO categories (name) VALUES 
+('Pizzas'),
+('Hamb�rgueres'),
+('Saladas'),
+('Bebidas'),
+('Sobremesas');
+

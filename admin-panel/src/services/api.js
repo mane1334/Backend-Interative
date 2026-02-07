@@ -6,16 +6,16 @@ const getDefaultAPIUrl = () => {
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
     const protocol = window.location.protocol;
-    
+
     // Se estiver em localhost, tenta detectar o IP real da máquina
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `${protocol}//${hostname}:3000/api`;
     }
-    
+
     // Se não for localhost, usa o hostname atual
     return `${protocol}//${hostname}:3000/api`;
   }
-  
+
   return 'http://localhost:3000/api';
 };
 
@@ -44,6 +44,12 @@ apiClient.interceptors.response.use(
 // --- Settings ---
 export const getSettings = () => apiClient.get('/settings');
 export const updateSettings = (settingsData) => apiClient.put('/settings', settingsData);
+
+// --- Categories ---
+export const getCategories = () => apiClient.get('/categories');
+export const createCategory = (data) => apiClient.post('/categories', data);
+export const updateCategory = (id, data) => apiClient.put(`/categories/${id}`, data);
+export const deleteCategory = (id) => apiClient.delete(`/categories/${id}`);
 
 // --- Dishes ---
 export const getDishes = () => apiClient.get('/dishes');
@@ -88,22 +94,22 @@ export const exportDatabase = async () => {
     const response = await axios.get(`${API_URL}/database/export`, {
       responseType: 'blob', // Importante para receber o arquivo
     });
-    
+
     // Cria um link temporário para forçar o download
     const url = window.URL.createObjectURL(new Blob([response.data]));
     const link = document.createElement('a');
     link.href = url;
-    
+
     const today = new Date().toISOString().slice(0, 10);
     link.setAttribute('download', `backup-${today}.sql`);
-    
+
     document.body.appendChild(link);
     link.click();
-    
+
     // Limpa o link e o objeto URL
     link.parentNode.removeChild(link);
     window.URL.revokeObjectURL(url);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Erro ao exportar banco de dados:', error);

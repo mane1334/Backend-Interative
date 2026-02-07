@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+.git
+.gitignore
+.vscode
+.env
+npm-debug.log
+.DS_Store
+coverage
+package-lock.json
+.pnp.*
+.cache

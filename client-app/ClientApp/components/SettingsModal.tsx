@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, Text, Modal, TouchableOpacity, TextInput, StyleSheet, Alert, NativeModules } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 
 interface SettingsModalProps {
     visible: boolean;
     onClose: () => void;
-    onSave: (ip: string, table: string, theme: string) => void;
+    onSave: (ip: string, table: string, theme: string, language: string) => void;
     initialIp: string;
     initialTable: string;
     currentTheme: string;
+    currentLanguage: string;
 }
 
 import { themes } from '../themes';
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, onSave, initialIp, initialTable, currentTheme }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, onSave, initialIp, initialTable, currentTheme, currentLanguage }) => {
     const [tempIp, setTempIp] = useState(initialIp);
     const [tempTable, setTempTable] = useState(initialTable);
     const [selectedTheme, setSelectedTheme] = useState(currentTheme);
+    const [selectedLanguage, setSelectedLanguage] = useState(currentLanguage);
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState('');
 
@@ -27,15 +29,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, onSave,
             setSelectedTheme(currentTheme);
         }
     }, [visible, initialIp, initialTable, currentTheme]);
-
-    // ... scanNetwork ...
-    // (scanNetwork function remains unchanged, omitted for brevity if possible, otherwise I should include it or use multi-replace to avoid deleting it) 
-    // Wait, replacing the whole component might be risky if I don't include scanNetwork. 
-    // I will use multi_replace to target specific parts or just use replace carefully.
-    // Actually, I can just update the props interface and the render method + state.
-    // But since I need to inject `scanNetwork` back, I should probably use `multi_replace` to just change the interface and the JSX.
-
-    // Let's use `multi_replace` instead to be safer.
 
     const scanNetwork = async () => {
         setIsScanning(true);
@@ -162,18 +155,57 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ visible, onClose, onSave,
                         </View>
                     </View>
 
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Idioma / Language:</Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                            {['pt', 'en'].map((lang) => (
+                                <TouchableOpacity
+                                    key={lang}
+                                    style={[
+                                        styles.themeButton,
+                                        { backgroundColor: '#475569' },
+                                        selectedLanguage === lang && styles.themeButtonSelected
+                                    ]}
+                                    onPress={() => setSelectedLanguage(lang)}
+                                >
+                                    <Text style={[styles.themeButtonText, selectedLanguage === lang && { color: '#fff' }]}>{lang === 'pt' ? '🇵🇹 Português' : '🇺🇸 English'}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+
                     <TouchableOpacity
                         style={styles.saveButton}
-                        onPress={() => onSave(tempIp.trim(), tempTable.trim(), selectedTheme)}
+                        onPress={() => onSave(tempIp.trim(), tempTable.trim(), selectedTheme, selectedLanguage)}
                     >
                         <Text style={styles.saveButtonText}>Salvar e Conectar</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.cancelButton, { marginTop: 20 }]}
+                        onPress={() => {
+                            Alert.alert(
+                                'Sair do Modo Kiosk',
+                                'Tem certeza que deseja sair do aplicativo?',
+                                [
+                                    { text: 'Cancelar', style: 'cancel' },
+                                    {
+                                        text: 'Sair e Destravar',
+                                        style: 'destructive',
+                                        onPress: () => NativeModules.KioskModule?.exitApp()
+                                    }
+                                ]
+                            );
+                        }}
+                    >
+                        <Text style={[styles.cancelButtonText, { color: '#ef4444' }]}>Sair do App (Admin)</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         style={styles.cancelButton}
                         onPress={onClose}
                     >
-                        <Text style={styles.cancelButtonText}>Cancelar</Text>
+                        <Text style={styles.cancelButtonText}>Fechar Configurações</Text>
                     </TouchableOpacity>
                 </View>
             </View>

@@ -62,6 +62,9 @@ Install-Deps -Path "$ScriptDir\backend" -Name "Backend"
 # Client App
 Install-Deps -Path "$ScriptDir\client-app\ClientApp" -Name "Client App"
 
+# Admin Panel
+Install-Deps -Path "$ScriptDir\admin-panel" -Name "Admin Panel"
+
 # --- NOVO: Detectar IP e configurar .env do Client App ---
 Write-Host "`n[2.5/4] Configurando IP de Rede..." -ForegroundColor Yellow
 
@@ -95,7 +98,7 @@ else {
 # -----------------------------------------------------
 
 # 3. Iniciar Backend
-Write-Host "`n[3/4] Iniciando Backend..." -ForegroundColor Yellow
+Write-Host "`n[3/5] Iniciando Backend..." -ForegroundColor Yellow
 $BackendPath = "$ScriptDir\backend"
 # Passando o host 0.0.0.0 via env var pode ajudar, mas o index.js precisa suportar. 
 # De qualquer forma, o express geralmente ouve em 0.0.0.0 se porta for apenas numero.
@@ -103,11 +106,17 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {cd '$BackendPa
 Write-Host "Backend iniciado em nova janela." -ForegroundColor Green
 
 # 4. Iniciar Client App (Metro Bundler)
-Write-Host "`n[4/4] Iniciando Client App Server (Metro)..." -ForegroundColor Yellow
+Write-Host "`n[4/5] Iniciando Client App Server (Metro)..." -ForegroundColor Yellow
 $ClientAppPath = "$ScriptDir\client-app\ClientApp"
 # Limpar cache do metro as vezes é bom quando muda .env, mas vamos rodar normal primeiro.
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {cd '$ClientAppPath'; npm start}" -WindowStyle Normal
 Write-Host "Client App Server iniciado em nova janela." -ForegroundColor Green
+
+# 5. Iniciar Admin Panel
+Write-Host "`n[5/5] Iniciando Admin Panel..." -ForegroundColor Yellow
+$AdminPanelPath = "$ScriptDir\admin-panel"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& {cd '$AdminPanelPath'; npm run dev}" -WindowStyle Normal
+Write-Host "Admin Panel iniciado em nova janela (Porta 3001)." -ForegroundColor Green
 
 Write-Host "`n=============================================" -ForegroundColor Cyan
 Write-Host "   Sistema iniciado com sucesso!" -ForegroundColor Cyan

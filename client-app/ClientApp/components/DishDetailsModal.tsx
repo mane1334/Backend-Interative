@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Modal, View, Text, Image, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Modal, View, Text, Image, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
 import { Dish } from '../types';
 import StarRating from './StarRating';
 import { Theme } from '../themes';
@@ -13,6 +13,8 @@ interface DishDetailsModalProps {
     theme: Theme;
 }
 
+const { width } = Dimensions.get('window');
+
 const DishDetailsModal: React.FC<DishDetailsModalProps> = ({ visible, dish, onClose, onAddToCart, onRate, theme }) => {
     const [quantity, setQuantity] = useState(1);
 
@@ -25,51 +27,75 @@ const DishDetailsModal: React.FC<DishDetailsModalProps> = ({ visible, dish, onCl
     };
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+        <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
             <View style={styles.overlay}>
-                <TouchableOpacity style={styles.backdrop} onPress={onClose} />
+                <TouchableOpacity style={styles.backdrop} onPress={onClose} activeOpacity={1} />
                 <View style={[styles.modalContainer, { backgroundColor: theme.colors.surface }]}>
-                    <ScrollView contentContainerStyle={styles.scrollContent}>
-                        <Image source={{ uri: dish.image_url || 'https://via.placeholder.com/400' }} style={styles.image} />
+
+                    {/* Header Image */}
+                    <View style={styles.imageContainer}>
+                        <Image source={{ uri: dish.image_url || 'https://via.placeholder.com/600' }} style={styles.image} />
+                        <View style={styles.imageOverlay} />
                         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
                             <Text style={styles.closeButtonText}>✕</Text>
                         </TouchableOpacity>
+                    </View>
 
+                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                         <View style={styles.content}>
+
+                            {/* Title & Price */}
                             <View style={styles.headerRow}>
                                 <Text style={[styles.title, { color: theme.colors.text }]}>{dish.name}</Text>
                                 <Text style={[styles.price, { color: theme.colors.success }]}>MT {parseFloat(String(dish.price)).toFixed(2)}</Text>
                             </View>
 
+                            {/* Prep Time Badge */}
+                            <View style={styles.infoRow}>
+                                <View style={[styles.badge, { backgroundColor: theme.colors.secondary }]}>
+                                    <Text style={[styles.badgeText, { color: theme.colors.text }]}>⏱️ {dish.preparation_time || 15} min</Text>
+                                </View>
+                                {dish.calories && (
+                                    <View style={[styles.badge, { backgroundColor: theme.colors.secondary }]}>
+                                        <Text style={[styles.badgeText, { color: theme.colors.text }]}>🔥 {dish.calories} cal</Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* Description */}
                             <Text style={[styles.description, { color: theme.colors.textSecondary }]}>{dish.description}</Text>
 
-                            <View style={[styles.ratingSection, { backgroundColor: theme.colors.background }]}>
+                            <View style={styles.divider} />
+
+                            {/* Rating Section */}
+                            <View style={styles.ratingSection}>
                                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>Avaliação</Text>
                                 <StarRating
                                     rating={dish.average_rating || 0}
                                     onRate={(n) => onRate(dish.id, n)}
-                                    size={46}
+                                    size={40}
                                 />
-                                <Text style={[styles.ratingHint, { color: theme.colors.textSecondary }]}>Toque para avaliar</Text>
-                            </View>
-
-                            <View style={styles.actionRow}>
-                                <View style={[styles.quantityControl, { backgroundColor: theme.colors.background, borderColor: theme.colors.border }]}>
-                                    <TouchableOpacity onPress={() => setQuantity(Math.max(1, quantity - 1))} style={[styles.qtyBtn, { backgroundColor: theme.colors.secondary }]}>
-                                        <Text style={[styles.qtyText, { color: theme.colors.text }]}>-</Text>
-                                    </TouchableOpacity>
-                                    <Text style={[styles.qtyValue, { color: theme.colors.text }]}>{quantity}</Text>
-                                    <TouchableOpacity onPress={() => setQuantity(quantity + 1)} style={[styles.qtyBtn, { backgroundColor: theme.colors.secondary }]}>
-                                        <Text style={[styles.qtyText, { color: theme.colors.text }]}>+</Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.colors.primary }]} onPress={handleAddToCart}>
-                                    <Text style={styles.addButtonText}>Adicionar - MT {(dish.price * quantity).toFixed(2)}</Text>
-                                </TouchableOpacity>
+                                <Text style={[styles.ratingHint, { color: theme.colors.textSecondary }]}>Toque nas estrelas para avaliar</Text>
                             </View>
                         </View>
                     </ScrollView>
+
+                    {/* Footer Actions */}
+                    <View style={[styles.footer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
+                        <View style={[styles.quantityControl, { backgroundColor: theme.colors.background }]}>
+                            <TouchableOpacity onPress={() => setQuantity(Math.max(1, quantity - 1))} style={styles.qtyBtn}>
+                                <Text style={[styles.qtyText, { color: theme.colors.text }]}>-</Text>
+                            </TouchableOpacity>
+                            <Text style={[styles.qtyValue, { color: theme.colors.text }]}>{quantity}</Text>
+                            <TouchableOpacity onPress={() => setQuantity(quantity + 1)} style={styles.qtyBtn}>
+                                <Text style={[styles.qtyText, { color: theme.colors.text }]}>+</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity style={[styles.addButton, { backgroundColor: theme.colors.primary }]} onPress={handleAddToCart}>
+                            <Text style={styles.addButtonText}>Adicionar • MT {(dish.price * quantity).toFixed(2)}</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </View>
         </Modal>
@@ -77,27 +103,33 @@ const DishDetailsModal: React.FC<DishDetailsModalProps> = ({ visible, dish, onCl
 };
 
 const styles = StyleSheet.create({
-    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    backdrop: { flex: 1 },
-    modalContainer: { borderTopLeftRadius: 32, borderTopRightRadius: 32, height: '70%', overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 },
-    scrollContent: { paddingBottom: 40 },
-    image: { width: '100%', height: 250, resizeMode: 'cover' },
-    closeButton: { position: 'absolute', top: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.6)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
+    backdrop: { ...StyleSheet.absoluteFillObject },
+    modalContainer: { width: width * 0.9, maxWidth: 500, height: '85%', borderRadius: 24, overflow: 'hidden', elevation: 10 },
+    imageContainer: { height: 220, width: '100%', position: 'relative' },
+    image: { width: '100%', height: '100%', resizeMode: 'cover' },
+    imageOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.2)' },
+    closeButton: { position: 'absolute', top: 16, right: 16, backgroundColor: 'rgba(0,0,0,0.6)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
     closeButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+    scrollContent: { paddingBottom: 20 },
     content: { padding: 24 },
-    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-    title: { fontSize: 24, fontWeight: '900', flex: 1, marginRight: 10 },
-    price: { fontSize: 22, fontWeight: 'bold' },
-    description: { fontSize: 16, lineHeight: 24, marginBottom: 32 },
+    headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    title: { fontSize: 26, fontWeight: '800', flex: 1 },
+    price: { fontSize: 22, fontWeight: '700' },
+    infoRow: { flexDirection: 'row', gap: 10, marginBottom: 20 },
+    badge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+    badgeText: { fontWeight: '600', fontSize: 14 },
+    description: { fontSize: 16, lineHeight: 24, marginBottom: 24 },
+    divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginBottom: 24 },
     sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-    ratingSection: { alignItems: 'center', marginBottom: 32, padding: 16, borderRadius: 16 },
+    ratingSection: { alignItems: 'center' },
     ratingHint: { fontSize: 12, marginTop: 8 },
-    actionRow: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-    quantityControl: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 6, borderWidth: 1 },
+    footer: { flexDirection: 'row', padding: 20, borderTopWidth: 1, gap: 16, alignItems: 'center' },
+    quantityControl: { flexDirection: 'row', alignItems: 'center', borderRadius: 16, padding: 4 },
     qtyBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12 },
-    qtyText: { fontSize: 20, fontWeight: 'bold' },
-    qtyValue: { fontSize: 18, fontWeight: 'bold', width: 40, textAlign: 'center' },
-    addButton: { flex: 1, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+    qtyText: { fontSize: 22, fontWeight: 'bold' },
+    qtyValue: { fontSize: 18, fontWeight: 'bold', width: 30, textAlign: 'center' },
+    addButton: { flex: 1, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
     addButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
 });
 

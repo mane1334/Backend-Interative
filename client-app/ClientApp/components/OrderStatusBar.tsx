@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Order } from '../types';
+import { Theme } from '../themes';
 
 interface OrderStatusBarProps {
     currentOrder: Order | null;
     onCancel: () => void;
+    theme: Theme;
 }
 
-const OrderStatusBar: React.FC<OrderStatusBarProps> = ({ currentOrder, onCancel }) => {
+const OrderStatusBar: React.FC<OrderStatusBarProps> = ({ currentOrder, onCancel, theme }) => {
     const [remainingPrep, setRemainingPrep] = useState<number | null>(null);
     const [remainingCancelMs, setRemainingCancelMs] = useState<number>(0);
 
@@ -17,7 +19,7 @@ const OrderStatusBar: React.FC<OrderStatusBarProps> = ({ currentOrder, onCancel 
         } else {
             setRemainingPrep(null);
         }
-    }, [currentOrder?.prepSeconds]); // Watch prepSeconds changes from prop
+    }, [currentOrder?.prepSeconds]);
 
     useEffect(() => {
         let prepInterval: any;
@@ -45,15 +47,22 @@ const OrderStatusBar: React.FC<OrderStatusBarProps> = ({ currentOrder, onCancel 
     if (!currentOrder) return null;
 
     return (
-        <View style={styles.orderBar}>
+        <View style={[
+            styles.orderBar,
+            {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                shadowColor: theme.colors.text // Shadow based on text color? No, black usually better.
+            }
+        ]}>
             <View style={{ flex: 1 }}>
-                <Text style={styles.orderBarTitle}>Pedido em preparo</Text>
-                <Text style={styles.orderBarText}>Estimativa: {Math.ceil((remainingPrep ?? 0) / 60)} min</Text>
+                <Text style={[styles.orderBarTitle, { color: theme.colors.text }]}>Pedido em preparo</Text>
+                <Text style={[styles.orderBarText, { color: theme.colors.textSecondary }]}>Estimativa: {Math.ceil((remainingPrep ?? 0) / 60)} min</Text>
             </View>
             <TouchableOpacity
                 disabled={remainingCancelMs <= 0}
                 onPress={onCancel}
-                style={[styles.cancelButton, remainingCancelMs <= 0 && { opacity: 0.5 }]}
+                style={[styles.cancelButton, { backgroundColor: theme.colors.error }, remainingCancelMs <= 0 && { opacity: 0.5 }]}
             >
                 <Text style={styles.cancelButtonText}>Cancelar ({Math.ceil(remainingCancelMs / 1000)}s)</Text>
             </TouchableOpacity>
@@ -62,10 +71,10 @@ const OrderStatusBar: React.FC<OrderStatusBarProps> = ({ currentOrder, onCancel 
 };
 
 const styles = StyleSheet.create({
-    orderBar: { position: 'absolute', bottom: 90, left: 20, right: 20, backgroundColor: 'rgba(30, 41, 59, 0.95)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)', borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 15, elevation: 12 },
-    orderBarTitle: { color: '#f8fafc', fontWeight: 'bold', fontSize: 15 },
-    orderBarText: { color: '#94a3b8', fontSize: 13, marginTop: 2 },
-    cancelButton: { backgroundColor: '#ef4444', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12 },
+    orderBar: { position: 'absolute', bottom: 90, left: 20, right: 20, borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 10, elevation: 8 },
+    orderBarTitle: { fontWeight: 'bold', fontSize: 15 },
+    orderBarText: { fontSize: 13, marginTop: 2 },
+    cancelButton: { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 12 },
     cancelButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
 });
 

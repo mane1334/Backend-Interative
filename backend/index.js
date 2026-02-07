@@ -9,6 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const sharp = require('sharp');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { authenticateToken, JWT_SECRET } = require('./middleware/auth');
 const { isLocalPath, deleteIfUnused } = require('./utils/imageCleanup');
 
 // --- Global Error Handlers to prevent crash ---
@@ -90,6 +93,8 @@ if (isDevelopment) {
     'http://127.0.0.1:3001',
     'http://127.0.0.1:3002',
     'http://127.0.0.1:5173',
+    'http://155.138.208.164:3000', // VPS IP - Backend
+    'http://155.138.208.164',      // VPS IP - Frontend default
   ];
 
   const whitelist = Array.from(new Set([...configuredOrigins, ...derivedOrigins, ...fallbackOrigins]));
@@ -275,6 +280,45 @@ wss.on('connection', ws => {
 
 
 
+
+// --- Autenticação (Admin) ---
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const { rows } = await db.query('SELECT * FROM users WHERE username = $1', [username]);
+    if (rows.length === 0) return res.status(401).json({ error: 'Credenciais inválidas.' });
+
+    const user = rows[0];
+    const validPassword = await bcrypt.compare(password, user.password_hash);
+    if (!validPassword) return res.status(401).json({ error: 'Credenciais inválidas.' });
+
+    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  } catch (err) {
+    console.error('Erro no login:', err);
+    res.status(500).json({ error: 'Erro interno no login.' });
+  }
+});
+
+// Setup Inicial (Criar primeiro admin se não existir)
+app.post('/api/auth/setup', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const { rows } = await db.query('SELECT COUNT(*) as count FROM users');
+    if (parseInt(rows[0].count) > 0) return res.status(403).json({ error: 'Setup já realizado.' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.query('INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)', [username, hashedPassword, 'admin']);
+    res.json({ message: 'Admin criado com sucesso.' });
+  } catch (err) {
+    console.error('Erro no setup:', err);
+    res.status(500).json({ error: 'Erro ao criar admin inicial.' });
+  }
+});
+
+
 // --- Rotas da API ---
 
 // Upload de imagens
@@ -299,6 +343,7 @@ app.post('/api/uploads', imageUpload.single('file'), async (req, res) => {
     return res.json({ path: `/uploads/${outputFilename}` });
   } catch (err) {
     console.error('Erro no upload de imagem:', err);
+    console.error('File info:', req.file);
     return res.status(500).json({ error: 'Erro ao processar a imagem.' });
   }
 });
@@ -316,6 +361,62 @@ app.get('/api/menu', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro ao buscar o cardápio.' });
+  }
+});
+
+// --- Gerenciamento de Categorias (CRUD) ---
+
+app.get('/api/categories', async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT * FROM categories ORDER BY id ASC');
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro ao buscar categorias:', err);
+    res.status(500).json({ error: 'Erro ao buscar categorias.' });
+  }
+});
+
+app.post('/api/categories', async (req, res) => {
+  const { name } = req.body;
+  try {
+    const { rows } = await db.query(
+      'INSERT INTO categories (name) VALUES ($1) RETURNING *',
+      [name]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Erro ao criar categoria:', err);
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Categoria já existe.' });
+    }
+    res.status(500).json({ error: 'Erro ao criar categoria.' });
+  }
+});
+
+app.put('/api/categories/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+  try {
+    const { rows } = await db.query(
+      'UPDATE categories SET name = $1 WHERE id = $2 RETURNING *',
+      [name, id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'Categoria não encontrada.' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Erro ao atualizar categoria:', err);
+    res.status(500).json({ error: 'Erro ao atualizar categoria.' });
+  }
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.query('DELETE FROM categories WHERE id = $1', [id]);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Erro ao deletar categoria:', err);
+    res.status(500).json({ error: 'Erro ao deletar categoria.' });
   }
 });
 
@@ -338,12 +439,12 @@ app.get('/api/dishes', async (req, res) => {
 
 // Criar um novo prato (Create)
 app.post('/api/dishes', async (req, res) => {
-  const { name, description, price, category_id, image_url, is_available } = req.body;
+  const { name, description, price, category_id, image_url, is_available, preparation_time, calories, is_spicy, is_vegetarian, is_gluten_free } = req.body;
   console.log('Attempting to create new dish with data:', req.body);
   try {
     const { rows } = await db.query(
-      'INSERT INTO dishes (name, description, price, category_id, image_url, is_available, updated_at) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *',
-      [name, description, price, category_id, image_url, is_available]
+      'INSERT INTO dishes (name, description, price, category_id, image_url, is_available, preparation_time, calories, is_spicy, is_vegetarian, is_gluten_free, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP) RETURNING *',
+      [name, description, price, category_id, image_url, is_available, preparation_time, calories, is_spicy || false, is_vegetarian || false, is_gluten_free || false]
     );
     console.log('Dish created successfully:', rows[0]);
     res.status(201).json(rows[0]);
@@ -356,7 +457,7 @@ app.post('/api/dishes', async (req, res) => {
 // Atualizar um prato (Update)
 app.put('/api/dishes/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, description, price, category_id, image_url, is_available } = req.body;
+  const { name, description, price, category_id, image_url, is_available, preparation_time, calories, is_spicy, is_vegetarian, is_gluten_free } = req.body;
   console.log(`Attempting to update dish ${id} with data:`, req.body);
   try {
     // Fetch current image_url before updating
@@ -367,8 +468,8 @@ app.put('/api/dishes/:id', async (req, res) => {
     const oldImagePath = existingRows[0].image_url;
 
     const { rows } = await db.query(
-      'UPDATE dishes SET name = $1, description = $2, price = $3, category_id = $4, image_url = $5, is_available = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-      [name, description, price, category_id, image_url, is_available, id]
+      'UPDATE dishes SET name = $1, description = $2, price = $3, category_id = $4, image_url = $5, is_available = $6, preparation_time = $7, calories = $8, is_spicy = $9, is_vegetarian = $10, is_gluten_free = $11, updated_at = CURRENT_TIMESTAMP WHERE id = $12 RETURNING *',
+      [name, description, price, category_id, image_url, is_available, preparation_time, calories, is_spicy || false, is_vegetarian || false, is_gluten_free || false, id]
     );
 
     const updated = rows[0];
@@ -506,17 +607,30 @@ app.post('/api/orders', async (req, res) => {
     return res.status(400).json({ error: 'Dados do pedido inválidos.' });
   }
 
-  const client = await db.pool.connect();
-  try {
-    await client.query('BEGIN');
+  // Abstração para suportar tanto Pool (Postgres) quanto Client único (SQLite)
+  const isPostgres = db.getDbType() === 'postgresql';
+  let client;
 
-    // Calcula o preço total a partir dos dados do DB para segurança
-    const dishIds = items.map(item => item.dish_id);
-    const pricesResult = await client.query('SELECT id, price FROM dishes WHERE id = ANY($1::int[])', [dishIds]);
+  if (isPostgres) {
+    client = await db.pool.connect();
+  } else {
+    // Mock client para SQLite
+    client = {
+      query: async (text, params) => db.query(text, params),
+      release: () => { }
+    };
+  }
+
+  try {
+    if (isPostgres) await client.query('BEGIN');
+    else await client.query('BEGIN TRANSACTION');
+
+    // 1. Validar preços (Fetching all dishes to filter in memory - compatible with both)
+    // Evita problemas com ANY() no SQLite
+    const dishesResult = await client.query('SELECT id, price FROM dishes');
+    const priceMap = new Map(dishesResult.rows.map(p => [p.id, parseFloat(p.price)]));
 
     let totalPrice = 0;
-    const priceMap = new Map(pricesResult.rows.map(p => [p.id, parseFloat(p.price)]));
-
     for (const item of items) {
       if (!priceMap.has(item.dish_id)) {
         throw new Error(`Prato com ID ${item.dish_id} não encontrado.`);
@@ -524,94 +638,122 @@ app.post('/api/orders', async (req, res) => {
       totalPrice += priceMap.get(item.dish_id) * item.quantity;
     }
 
-    // Define tempo de preparo inicial (default 20 minutos)
-    const defaultPrepSeconds = Number.isFinite(requestedPrepSeconds) && requestedPrepSeconds > 0
+    // 2. Tempo de preparo
+    let defaultPrepSeconds = Number.isFinite(requestedPrepSeconds) && requestedPrepSeconds > 0
       ? Math.floor(requestedPrepSeconds)
-      : 20 * 60;
+      : null;
 
-    // Insere o pedido na tabela 'orders' com tempo de preparo e janela de cancelamento (5 min)
-    const orderResult = await client.query(
-      `INSERT INTO orders (table_number, total_price, prep_time_seconds, cancel_until)
-       VALUES ($1, $2, $3, CURRENT_TIMESTAMP + INTERVAL '5 minutes') RETURNING id, created_at, prep_time_seconds, cancel_until`,
-      [table_number, totalPrice, defaultPrepSeconds]
-    );
-    const orderId = orderResult.rows[0].id;
+    if (!defaultPrepSeconds) {
+      // Tenta buscar das configurações
+      const settingsRes = await client.query("SELECT value FROM settings WHERE key = 'default_prep_time'");
+      if (settingsRes.rows.length > 0) {
+        const val = parseInt(settingsRes.rows[0].value);
+        if (!isNaN(val) && val > 0) defaultPrepSeconds = val * 60;
+      }
+    }
+    if (!defaultPrepSeconds) defaultPrepSeconds = 20 * 60;
 
-    // Insere os itens do pedido na tabela 'order_items'
-    const itemQueries = items.map(item => {
+    // 3. Inserir Pedido
+    let orderId;
+    let orderData;
+
+    if (isPostgres) {
+      const orderResult = await client.query(
+        `INSERT INTO orders (table_number, total_price, prep_time_seconds, cancel_until)
+           VALUES ($1, $2, $3, CURRENT_TIMESTAMP + INTERVAL '5 minutes') 
+           RETURNING id, created_at, prep_time_seconds, cancel_until`,
+        [table_number, totalPrice, defaultPrepSeconds]
+      );
+      orderId = orderResult.rows[0].id;
+      orderData = orderResult.rows[0];
+    } else {
+      // SQLite: Insert then Select (Wrapper returns { rows: [{id: lastID}] } for insert)
+      const insertRes = await client.query(
+        `INSERT INTO orders (table_number, total_price, prep_time_seconds, cancel_until)
+           VALUES ($1, $2, $3, datetime('now', '+5 minutes'))`,
+        [table_number, totalPrice, defaultPrepSeconds]
+      );
+      orderId = insertRes.rows[0].id; // lastID from wrapper
+
+      // Fetch back
+      const fetchRes = await client.query('SELECT * FROM orders WHERE id = $1', [orderId]);
+      orderData = fetchRes.rows[0];
+    }
+
+    // 4. Inserir Itens
+    for (const item of items) {
       const itemPrice = priceMap.get(item.dish_id);
-      return client.query(
+      await client.query(
         'INSERT INTO order_items (order_id, dish_id, quantity, item_price) VALUES ($1, $2, $3, $4)',
         [orderId, item.dish_id, item.quantity, itemPrice]
       );
-    });
+    }
 
-    await Promise.all(itemQueries);
+    if (isPostgres) await client.query('COMMIT');
+    else await client.query('COMMIT');
 
-    await client.query('COMMIT');
-
-    // Notifica o painel e clientes via WebSocket com dados iniciais
+    // Notifica
     wss.broadcast(JSON.stringify({
       type: 'NEW_ORDER',
       payload: {
         order_id: orderId,
         table_number,
-        prep_time_seconds: orderResult.rows[0].prep_time_seconds,
-        cancel_until: orderResult.rows[0].cancel_until
+        prep_time_seconds: orderData.prep_time_seconds,
+        cancel_until: orderData.cancel_until
       }
     }));
 
     res.status(201).json({
       message: 'Pedido criado com sucesso!',
       order_id: orderId,
-      prep_time_seconds: orderResult.rows[0].prep_time_seconds,
-      cancel_until: orderResult.rows[0].cancel_until
+      prep_time_seconds: orderData.prep_time_seconds,
+      cancel_until: orderData.cancel_until
     });
 
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Erro ao criar o pedido.' });
+    if (isPostgres) await client.query('ROLLBACK');
+    else {
+      try { await client.query('ROLLBACK'); } catch (_) { }
+    }
+
+    console.error('CRITICAL ERROR creating order:', err);
+    console.error('Order Data:', JSON.stringify({ table_number, items, prep_time_seconds: requestedPrepSeconds }));
+    res.status(500).json({ error: 'Erro ao criar o pedido. Verifique os logs do servidor.' });
   } finally {
     client.release();
   }
 });
 
-// Atualizar status do pedido (garçom/cozinha)
+// Atualizar status do pedido
 app.put('/api/orders/:id/status', async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body; // expected: 'preparing', 'completed', 'delivered'
-
-  if (!['preparing', 'completed', 'delivered'].includes(status)) {
-    return res.status(400).json({ error: 'Status inválido.' });
-  }
+  const { status, cancellation_reason } = req.body;
 
   try {
     const { rows } = await db.query(
-      `UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
-      [status, id]
+      'UPDATE orders SET status = $1, cancellation_reason = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3 RETURNING *',
+      [status, status === 'cancelled' ? cancellation_reason : null, id]
     );
 
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Pedido não encontrado.' });
     }
 
-    const updated = rows[0];
+    const updatedOrder = rows[0];
 
-    // Broadcast update
+    // Notificar via WebSocket
+    let eventName = 'ORDER_STATUS_UPDATE';
+    if (status === 'cancelled') eventName = 'ORDER_CANCELLED';
+    if (status === 'completed') eventName = 'ORDER_COMPLETED';
+
     wss.broadcast(JSON.stringify({
-      type: 'ORDER_STATUS_UPDATE',
-      payload: {
-        order_id: updated.id,
-        status: updated.status,
-        table_number: updated.table_number
-      }
+      type: eventName,
+      payload: updatedOrder
     }));
-
-    res.json(updated);
+    res.json(updatedOrder);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Erro ao atualizar status.' });
+    console.error('Erro ao atualizar status do pedido:', err);
+    res.status(500).json({ error: 'Erro ao atualizar status do pedido.' });
   }
 });
 
@@ -701,14 +843,71 @@ app.post('/api/orders/:id/cancel', async (req, res) => {
 });
 
 // Chamada de Garçom
-app.post('/api/call-waiter', (req, res) => {
-  const { table_number } = req.body;
-  console.log(`Mesa ${table_number} está chamando o garçom.`);
+app.post('/api/call-waiter', async (req, res) => {
+  const { table_number, reason } = req.body;
+  const callReason = reason || 'Chamado Geral';
+  console.log(`Mesa ${table_number} está chamando o garçom. Motivo: ${callReason}`);
 
-  // Notifica o painel via WebSocket
-  wss.broadcast(JSON.stringify({ type: 'CALL_WAITER', payload: { table_number } }));
+  try {
+    // Inserir chamada no banco de dados
+    const { rows } = await db.query(
+      'INSERT INTO waiter_calls (table_number, reason) VALUES ($1, $2) RETURNING *',
+      [table_number, callReason]
+    );
 
-  res.status(200).json({ message: `Notificação enviada para a mesa ${table_number}` });
+    const newCall = rows[0];
+
+    // Notifica o painel via WebSocket
+    wss.broadcast(JSON.stringify({ type: 'CALL_WAITER', payload: { id: newCall.id, table_number, reason: callReason, created_at: newCall.created_at } }));
+
+    res.status(200).json({ message: `Notificação enviada para a mesa ${table_number}`, call: newCall });
+  } catch (err) {
+    console.error('Erro ao registrar chamada de garçom:', err);
+    res.status(500).json({ error: 'Erro ao registrar chamada.' });
+  }
+});
+
+// Obter chamadas de garçom pendentes
+app.get('/api/waiter-calls', async (req, res) => {
+  const { status } = req.query;
+  try {
+    let query = "SELECT * FROM waiter_calls";
+    let params = [];
+
+    if (status === 'resolved') {
+      query += " WHERE status = 'resolved' ORDER BY created_at DESC LIMIT 50";
+    } else {
+      query += " WHERE status = 'pending' ORDER BY created_at DESC";
+    }
+
+    const { rows } = await db.query(query, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Erro ao buscar chamadas:', err);
+    res.status(500).json({ error: 'Erro ao buscar chamadas.' });
+  }
+});
+
+// Marcar chamada como atendida
+app.put('/api/waiter-calls/:id/resolve', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await db.query(
+      "UPDATE waiter_calls SET status = 'resolved' WHERE id = $1 RETURNING *",
+      [id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Chamada não encontrada.' });
+    }
+
+    // Broadcast update
+    wss.broadcast(JSON.stringify({ type: 'WAITER_CALL_RESOLVED', payload: { id: rows[0].id } }));
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Erro ao resolver chamada:', err);
+    res.status(500).json({ error: 'Erro ao resolver chamada.' });
+  }
 });
 
 // --- Configurações ---
@@ -803,32 +1002,96 @@ app.post('/api/ratings', async (req, res) => {
 // --- Analytics ---
 app.get('/api/analytics', async (req, res) => {
   const dbType = db.getDbType();
+  const { startDate, endDate } = req.query; // YYYY-MM-DD
+
   try {
+    let dateFilter = "";
+    let dateParams = [];
+    let compareDateFilter = "";
+    let compareParams = [];
+
+    // Configura filtros de data se fornecidos, senão usa padrão 7 dias
+    if (startDate && endDate) {
+      if (dbType === 'postgresql') {
+        dateFilter = "AND created_at BETWEEN $1::date AND $2::date + INTERVAL '1 day'";
+        dateParams = [startDate, endDate];
+        // Para comparação (período anterior)
+        compareDateFilter = "AND created_at BETWEEN $1::date - INTERVAL '1 day' * ($2::date - $1::date) AND $1::date";
+        compareParams = [startDate, endDate];
+      } else {
+        dateFilter = "AND created_at BETWEEN ? AND datetime(?, '+1 day')";
+        dateParams = [startDate, endDate];
+        // sqlite comparison logic simplified for now
+      }
+    } else {
+      // Default: Last 7 days
+      if (dbType === 'postgresql') {
+        dateFilter = "AND created_at >= NOW() - INTERVAL '7 days'";
+      } else {
+        dateFilter = "AND created_at >= date('now', '-7 days')";
+      }
+    }
+
+    // Helper para queries (simplificado para SQLite focado)
+    const runQuery = async (sql, params = []) => {
+      // Substitui WHERE ... se necessário ou adiciona AND
+      // Aqui vamos assumir queries base que já têm WHERE ou não
+      const finalSql = sql.replace('{DATE_FILTER}', dateFilter);
+      return db.query(finalSql, dateParams.length > 0 ? dateParams : params);
+    };
+
     let ordersByDay, topDishes, dailySummary, monthlySummary, avgServiceTime;
     let revenueByCategory, peakHours, topRated;
+    let comparisonSummary; // Dados do período anterior para comparação
 
     if (dbType === 'postgresql') {
+      // ... (PostgreSQL logic omitted for brevity as user uses SQLite mostly, but should follow similar pattern if needed)
+      // Mantendo lógica original para PostgreSQL por enquanto para não quebrar compatibilidade se mudar DB
       [ordersByDay, topDishes, dailySummary, monthlySummary, avgServiceTime, revenueByCategory, peakHours, topRated] = await Promise.all([
-        db.query(`SELECT to_char(created_at, 'YYYY-MM-DD') as day, COUNT(*) as pedidos, SUM(total_price) as faturamento, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido FROM orders WHERE created_at >= NOW() - INTERVAL '7 days' GROUP BY day ORDER BY day ASC`),
-        db.query(`SELECT d.name, SUM(oi.quantity) as total FROM order_items oi JOIN dishes d ON oi.dish_id = d.id GROUP BY d.name ORDER BY total DESC LIMIT 5`),
-        db.query(`SELECT COUNT(*) as total_pedidos_dia, SUM(total_price) as faturamento_dia, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados_dia, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido_dia FROM orders WHERE created_at::date = CURRENT_DATE`),
-        db.query(`SELECT COUNT(*) as total_pedidos_mes, SUM(total_price) as faturamento_mes, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados_mes, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido_mes FROM orders WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)`),
-        db.query(`SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_seconds FROM orders WHERE status = 'completed' AND updated_at IS NOT NULL`),
-        db.query(`SELECT c.name, SUM(oi.quantity * oi.item_price) as revenue FROM order_items oi JOIN dishes d ON oi.dish_id = d.id JOIN categories c ON d.category_id = c.id GROUP BY c.name`),
-        db.query(`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count FROM orders GROUP BY hour ORDER BY hour ASC`),
-        db.query(`SELECT d.name, AVG(r.rating) as avg_rating, COUNT(r.id) as count FROM ratings r JOIN dishes d ON r.dish_id = d.id GROUP BY d.id, d.name HAVING COUNT(r.id) > 0 ORDER BY avg_rating DESC LIMIT 5`)
+        db.query(`SELECT to_char(created_at, 'YYYY-MM-DD') as day, COUNT(*) as pedidos, SUM(total_price) as faturamento, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido FROM orders WHERE 1=1 ${dateFilter} GROUP BY day ORDER BY day ASC`, dateParams),
+        db.query(`SELECT d.name, SUM(oi.quantity) as total FROM order_items oi JOIN dishes d ON oi.dish_id = d.id JOIN orders o ON oi.order_id = o.id WHERE 1=1 ${dateFilter.replace('created_at', 'o.created_at')} GROUP BY d.name ORDER BY total DESC LIMIT 5`, dateParams),
+        db.query(`SELECT COUNT(*) as total_pedidos_dia, SUM(total_price) as faturamento_dia FROM orders WHERE created_at::date = CURRENT_DATE`), // Mantém KPI de 'Hoje' fixo
+        db.query(`SELECT COUNT(*) as total_pedidos_mes, SUM(total_price) as faturamento_mes FROM orders WHERE date_trunc('month', created_at) = date_trunc('month', CURRENT_DATE)`),
+        db.query(`SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) as avg_seconds FROM orders WHERE status = 'completed' AND updated_at IS NOT NULL ${dateFilter}`, dateParams),
+        db.query(`SELECT c.name, SUM(oi.quantity * oi.item_price) as revenue FROM order_items oi JOIN dishes d ON oi.dish_id = d.id JOIN categories c ON d.category_id = c.id JOIN orders o ON oi.order_id = o.id WHERE 1=1 ${dateFilter.replace('created_at', 'o.created_at')} GROUP BY c.name`, dateParams),
+        db.query(`SELECT EXTRACT(HOUR FROM created_at) as hour, COUNT(*) as count FROM orders WHERE 1=1 ${dateFilter} GROUP BY hour ORDER BY hour ASC`, dateParams),
+        db.query(`SELECT d.name, AVG(r.rating) as avg_rating, COUNT(r.id) as count FROM ratings r JOIN dishes d ON r.dish_id = d.id WHERE 1=1 ${dateFilter.replace('created_at', 'r.created_at')} GROUP BY d.id, d.name HAVING COUNT(r.id) > 0 ORDER BY avg_rating DESC LIMIT 5`, dateParams)
       ]);
     } else { // SQLite
-      [ordersByDay, topDishes, dailySummary, monthlySummary, avgServiceTime, revenueByCategory, peakHours, topRated] = await Promise.all([
-        db.query(`SELECT strftime('%Y-%m-%d', created_at) as day, COUNT(*) as pedidos, SUM(total_price) as faturamento, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido FROM orders WHERE created_at >= date('now', '-7 days') GROUP BY day ORDER BY day ASC`),
-        db.query(`SELECT d.name, SUM(oi.quantity) as total FROM order_items oi JOIN dishes d ON oi.dish_id = d.id GROUP BY d.name ORDER BY total DESC LIMIT 5`),
-        db.query(`SELECT COUNT(*) as total_pedidos_dia, SUM(total_price) as faturamento_dia, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados_dia, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido_dia FROM orders WHERE date(created_at) = date('now')`),
-        db.query(`SELECT COUNT(*) as total_pedidos_mes, SUM(total_price) as faturamento_mes, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados_mes, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido_mes FROM orders WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`),
-        db.query(`SELECT AVG(strftime('%s', updated_at) - strftime('%s', created_at)) as avg_seconds FROM orders WHERE status = 'completed' AND updated_at IS NOT NULL`),
-        db.query(`SELECT c.name, SUM(oi.quantity * oi.item_price) as revenue FROM order_items oi JOIN dishes d ON oi.dish_id = d.id JOIN categories c ON d.category_id = c.id GROUP BY c.name`),
-        db.query(`SELECT strftime('%H', created_at) as hour, COUNT(*) as count FROM orders GROUP BY hour ORDER BY hour ASC`),
-        db.query(`SELECT d.name, AVG(r.rating) as avg_rating, COUNT(r.id) as count FROM ratings r JOIN dishes d ON r.dish_id = d.id GROUP BY d.id, d.name ORDER BY avg_rating DESC LIMIT 5`)
+      // Ajuste das queries para usar o filtro dinâmico
+
+      const ordersQuery = `SELECT strftime('%Y-%m-%d', created_at) as day, COUNT(*) as pedidos, SUM(total_price) as faturamento, COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as pedidos_cancelados, SUM(CASE WHEN status = 'cancelled' THEN total_price ELSE 0 END) as faturamento_perdido FROM orders WHERE 1=1 ${dateFilter} GROUP BY day ORDER BY day ASC`;
+
+      const topDishesQuery = `SELECT d.name, SUM(oi.quantity) as total FROM order_items oi JOIN dishes d ON oi.dish_id = d.id JOIN orders o ON oi.order_id = o.id WHERE 1=1 ${dateFilter.replace('created_at', 'o.created_at')} GROUP BY d.name ORDER BY total DESC LIMIT 5`;
+
+      const avgTimeQuery = `SELECT AVG(strftime('%s', updated_at) - strftime('%s', created_at)) as avg_seconds FROM orders WHERE status = 'completed' AND updated_at IS NOT NULL ${dateFilter}`;
+
+      const revCatQuery = `SELECT c.name, SUM(oi.quantity * oi.item_price) as revenue FROM order_items oi JOIN dishes d ON oi.dish_id = d.id JOIN categories c ON d.category_id = c.id JOIN orders o ON oi.order_id = o.id WHERE 1=1 ${dateFilter.replace('created_at', 'o.created_at')} GROUP BY c.name`;
+
+      const peakHoursQuery = `SELECT strftime('%H', created_at) as hour, COUNT(*) as count FROM orders WHERE 1=1 ${dateFilter} GROUP BY hour ORDER BY hour ASC`;
+
+      const topRatedQuery = `SELECT d.name, AVG(r.rating) as avg_rating, COUNT(r.id) as count FROM ratings r JOIN dishes d ON r.dish_id = d.id WHERE 1=1 ${dateFilter.replace('created_at', 'r.created_at')} GROUP BY d.id, d.name ORDER BY avg_rating DESC LIMIT 5`;
+
+      // KPIs de "Hoje" e "Mês" fixos para manter o overview imediato
+      const dailySummaryPromise = db.query(`SELECT COUNT(*) as total_pedidos_dia, SUM(total_price) as faturamento_dia FROM orders WHERE date(created_at) = date('now')`);
+      const monthlySummaryPromise = db.query(`SELECT COUNT(*) as total_pedidos_mes, SUM(total_price) as faturamento_mes FROM orders WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')`);
+
+      // KPI do período SELECIONADO (Filtered Summary)
+      const filteredSummaryQuery = `SELECT COUNT(*) as total_pedidos, SUM(total_price) as faturamento FROM orders WHERE 1=1 ${dateFilter}`;
+
+      const results = await Promise.all([
+        db.query(ordersQuery, dateParams),
+        db.query(topDishesQuery, dateParams),
+        dailySummaryPromise,
+        monthlySummaryPromise,
+        db.query(avgTimeQuery, dateParams),
+        db.query(revCatQuery, dateParams),
+        db.query(peakHoursQuery, dateParams),
+        db.query(topRatedQuery, dateParams),
+        db.query(filteredSummaryQuery, dateParams)
       ]);
+
+      [ordersByDay, topDishes, dailySummary, monthlySummary, avgServiceTime, revenueByCategory, peakHours, topRated, comparisonSummary] = results;
     }
 
     res.json({
@@ -836,7 +1099,8 @@ app.get('/api/analytics', async (req, res) => {
       topDishes: topDishes.rows,
       dailySummary: dailySummary.rows[0],
       monthlySummary: monthlySummary.rows[0],
-      avgServiceTime: avgServiceTime.rows[0]?.avg_seconds,
+      filteredSummary: comparisonSummary ? comparisonSummary.rows[0] : null, // Novo campo com totais do filtro
+      avgServiceTime: avgServiceTime.rows[0].avg_seconds,
       revenueByCategory: revenueByCategory.rows,
       peakHours: peakHours.rows,
       topRated: topRated.rows
@@ -934,6 +1198,23 @@ app.get('/api/orders/export', async (req, res) => {
   } catch (err) {
     console.error('Erro ao exportar pedidos:', err);
     res.status(500).json({ error: 'Erro ao gerar o arquivo de exportação.' });
+  }
+});
+
+// Obter pedido por ID
+app.get('/api/orders/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await db.query(`
+      SELECT o.id, o.table_number, o.status, o.total_price, o.created_at, o.updated_at, o.prep_time_seconds, o.cancel_until
+      FROM orders o
+      WHERE o.id = $1
+    `, [id]);
+
+    if (rows.length === 0) return res.status(404).json({ error: 'Pedido não encontrado.' });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar pedido.' });
   }
 });
 

@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
+import { SharedElement } from 'react-navigation-shared-element';
 import { Dish } from '../types';
 import StarRating from './StarRating';
 import { Theme } from '../themes';
+import { resolveImageUrl } from '../utils/urlUtils';
 
 interface DishCardProps {
     item: Dish;
@@ -13,13 +15,32 @@ interface DishCardProps {
 }
 
 const DishCard: React.FC<DishCardProps> = ({ item, onRate, onAddToCart, onPress, theme }) => {
+    const getTags = () => {
+        const text = (item.name + ' ' + (item.category_name || '') + ' ' + (item.description || '')).toLowerCase();
+        const tags = [];
+        if (text.includes('picante') || text.includes('spicy')) tags.push('🌶️');
+        if (text.includes('vegetariano') || text.includes('vegan') || text.includes('salada')) tags.push('🥬');
+        if (text.includes('burger')) tags.push('🍔');
+        if (text.includes('doce') || text.includes('sobremesa')) tags.push('🍰');
+        if (text.includes('bebida') || text.includes('coquetel')) tags.push('🍹');
+        return tags;
+    };
+    const tags = getTags();
+
     return (
         <TouchableOpacity onPress={onPress} activeOpacity={0.9} style={[styles.dishCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}>
             <View style={styles.imageContainer}>
-                <Image source={{ uri: item.image_url || 'https://via.placeholder.com/300' }} style={styles.dishImage} />
+                <SharedElement id={`item.${item.id}.photo`}>
+                    <Image source={{ uri: resolveImageUrl(item.image_url) }} style={styles.dishImage} />
+                </SharedElement>
                 <View style={[styles.priceTag, { backgroundColor: theme.colors.overlay, borderColor: theme.colors.border }]}>
                     <Text style={[styles.priceTagText, { color: theme.colors.success }]}>MT {parseFloat(String(item.price)).toFixed(2)}</Text>
                 </View>
+                {tags.length > 0 && (
+                    <View style={styles.tagsContainer}>
+                        {tags.map((t, i) => <Text key={i} style={styles.tagIcon}>{t}</Text>)}
+                    </View>
+                )}
             </View>
             <View style={styles.dishContent}>
                 <Text style={[styles.dishName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
@@ -42,6 +63,8 @@ const styles = StyleSheet.create({
     dishImage: { width: '100%', height: '100%', resizeMode: 'cover' },
     priceTag: { position: 'absolute', top: 12, right: 12, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
     priceTagText: { fontWeight: 'bold', fontSize: 13 },
+    tagsContainer: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', gap: 4 },
+    tagIcon: { fontSize: 16, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 4, overflow: 'hidden' },
     dishContent: { padding: 14 },
     dishName: { fontSize: 17, fontWeight: 'bold', marginBottom: 4 },
     dishDescription: { fontSize: 12, marginBottom: 12, lineHeight: 18, height: 36 },

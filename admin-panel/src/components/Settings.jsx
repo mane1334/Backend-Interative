@@ -3,7 +3,7 @@ import { getSettings, updateSettings, uploadImage } from '../services/api';
 import { toast } from 'react-toastify';
 
 const Settings = () => {
-  const [settings, setSettings] = useState({ 
+  const [settings, setSettings] = useState({
     restaurant_name: '',
     menu_theme: 'default',
     tables_count: 20,
@@ -20,6 +20,7 @@ const Settings = () => {
     enable_ai_chat: true,
     enable_customer_ratings: true,
     enable_ads_module: true,
+    default_language: 'pt',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
@@ -86,7 +87,7 @@ const Settings = () => {
     <div className="p-6 bg-gray-100 min-h-screen">
       <h1 className="text-3xl font-bold text-gray-800 mb-6">Configurações</h1>
       <form onSubmit={handleSave} className="space-y-10">
-        
+
         {/* Configurações Gerais */}
         <div className="bg-white p-8 rounded-lg shadow-md max-w-3xl mx-auto">
           <h2 className="text-2xl font-semibold text-gray-900 mb-6 border-b pb-4">Geral</h2>
@@ -124,6 +125,13 @@ const Settings = () => {
               <label htmlFor="cancellation_window" className="block text-sm font-medium text-gray-700">Cancelamento (min)</label>
               <input type="number" id="cancellation_window" name="cancellation_window" min="0" value={settings.cancellation_window || 5} onChange={handleChange} className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
+            <div>
+              <label htmlFor="default_language" className="block text-sm font-medium text-gray-700">Idioma Padrão (App Cliente)</label>
+              <select id="default_language" name="default_language" value={settings.default_language || 'pt'} onChange={handleChange} className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="pt">🇵🇹 Português</option>
+                <option value="en">🇺🇸 English</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -131,13 +139,13 @@ const Settings = () => {
         <div className="bg-white p-8 rounded-lg shadow-md max-w-3xl mx-auto">
           <h2 className="text-2xl font-semibold text-gray-900 mb-6 border-b pb-4">Personalização e Marca</h2>
           <div className="space-y-6">
-            
+
             <div>
               <label className="block text-sm font-medium text-gray-700">Logo do Restaurante</label>
               <div className="mt-2 flex items-center gap-6">
                 <div className="w-24 h-24 rounded-lg bg-gray-100 flex items-center justify-center border overflow-hidden">
                   {settings.restaurant_logo_url ? (
-                    <img src={settings.restaurant_logo_url.startsWith('http') ? settings.restaurant_logo_url : `${import.meta.env.VITE_API_URL.replace('/api','')}${settings.restaurant_logo_url}`} alt="Logo Preview" className="h-full w-full object-cover" />
+                    <img src={settings.restaurant_logo_url.startsWith('http') ? settings.restaurant_logo_url : `${import.meta.env.VITE_API_URL.replace('/api', '')}${settings.restaurant_logo_url}`} alt="Logo Preview" className="h-full w-full object-cover" />
                   ) : (
                     <span className="text-xs text-gray-500">Sem Logo</span>
                   )}

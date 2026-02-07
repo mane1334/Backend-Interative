@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { resolveImageUrl, PLACEHOLDER_IMG } from '../utils/images';
-import { uploadImage } from '../services/api';
+import { uploadImage, getCategories } from '../services/api'; // getCategories imported
 
 const DishForm = ({ dish, onSave, onCancel }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     price: '',
-    category_id: 1, // Exemplo, idealmente seria um select
+    category_id: '', // Default empty, wait for load
     image_url: '',
     is_available: true,
+    is_spicy: false,
+    is_vegetarian: false,
+    is_gluten_free: false,
   });
+  const [categories, setCategories] = useState([]); // New state
   const [formErrors, setFormErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'success' | 'error' | null
@@ -18,20 +22,32 @@ const DishForm = ({ dish, onSave, onCancel }) => {
   const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
+    // Fetch categories
+    getCategories().then(setCategories).catch(console.error);
+
     if (dish) {
       setFormData(dish);
     } else {
-      // Reset form for new dish
       setFormData({
         name: '',
         description: '',
         price: '',
-        category_id: 1,
+        category_id: '',
         image_url: '',
         is_available: true,
+        is_spicy: false,
+        is_vegetarian: false,
+        is_gluten_free: false,
       });
     }
   }, [dish]);
+
+  // Set default category if creating new and categories loaded
+  useEffect(() => {
+    if (!dish && categories.length > 0 && !formData.category_id) {
+      setFormData(prev => ({ ...prev, category_id: categories[0].id }));
+    }
+  }, [categories, dish]);
 
   // Fechar com ESC e bloquear scroll do body enquanto o modal estiver aberto
   useEffect(() => {
@@ -40,11 +56,11 @@ const DishForm = ({ dish, onSave, onCancel }) => {
     };
     try {
       document.body.style.overflow = 'hidden';
-    } catch {}
+    } catch { }
     window.addEventListener('keydown', handleKey);
     return () => {
       window.removeEventListener('keydown', handleKey);
-      try { document.body.style.overflow = ''; } catch {}
+      try { document.body.style.overflow = ''; } catch { }
     };
   }, [onCancel]);
 
@@ -130,7 +146,7 @@ const DishForm = ({ dish, onSave, onCancel }) => {
     } finally {
       setUploading(false);
       // permite reenviar o mesmo arquivo caso o usuário selecione o mesmo nome
-      try { e.target.value = ''; } catch (_) {}
+      try { e.target.value = ''; } catch (_) { }
     }
   };
 
@@ -143,10 +159,10 @@ const DishForm = ({ dish, onSave, onCancel }) => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </div>
-          <button 
-            type="button" 
-            onClick={onCancel} 
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600" 
+          <button
+            type="button"
+            onClick={onCancel}
+            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
             aria-label="Fechar"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,6 +179,19 @@ const DishForm = ({ dish, onSave, onCancel }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Coluna esquerda */}
               <div className="space-y-4">
+                <div>
+                  <label className="block text-gray-700 font-medium mb-1">Categoria</label>
+                  <select
+                    name="category_id"
+                    value={formData.category_id}
+                    onChange={handleChange}
+                    className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  >
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">Nome</label>
                   <input
@@ -207,6 +236,23 @@ const DishForm = ({ dish, onSave, onCancel }) => {
                   <input type="checkbox" name="is_available" checked={formData.is_available} onChange={handleChange} className="mr-2 w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
                   <span className="text-gray-700 font-medium">Disponível no cardápio</span>
                 </label>
+
+                {/* Dietary Tags */}
+                <div className="p-3 border border-gray-300 rounded-md space-y-2">
+                  <span className="block text-gray-700 font-medium mb-2">Tags Alimentares</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="is_spicy" checked={formData.is_spicy} onChange={handleChange} className="w-4 h-4 text-red-500 focus:ring-red-500 border-gray-300 rounded" />
+                    <span>🌶️ Picante</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="is_vegetarian" checked={formData.is_vegetarian} onChange={handleChange} className="w-4 h-4 text-green-500 focus:ring-green-500 border-gray-300 rounded" />
+                    <span>🥬 Vegetariano</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" name="is_gluten_free" checked={formData.is_gluten_free} onChange={handleChange} className="w-4 h-4 text-yellow-500 focus:ring-yellow-500 border-gray-300 rounded" />
+                    <span>🌾 Sem Glúten</span>
+                  </label>
+                </div>
 
                 <div>
                   <label className="block text-gray-700 font-medium mb-1">URL da Imagem</label>
@@ -254,7 +300,7 @@ const DishForm = ({ dish, onSave, onCancel }) => {
                       className="h-32 w-32 object-cover rounded-lg border shadow-sm"
                       onError={(e) => {
                         e.currentTarget.src = PLACEHOLDER_IMG;
-                        try { window.dispatchEvent(new CustomEvent('admin:toast', { detail: { type: 'error', message: 'Falha ao carregar a imagem. Verifique a URL.' } })); } catch {}
+                        try { window.dispatchEvent(new CustomEvent('admin:toast', { detail: { type: 'error', message: 'Falha ao carregar a imagem. Verifique a URL.' } })); } catch { }
                       }}
                     />
                   </div>
@@ -265,15 +311,15 @@ const DishForm = ({ dish, onSave, onCancel }) => {
         </div>
         <div className="flex-shrink-0 p-6 border-t bg-gray-50 rounded-b-lg">
           <div className="flex justify-end space-x-3">
-            <button 
-              type="button" 
-              onClick={onCancel} 
+            <button
+              type="button"
+              onClick={onCancel}
               className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors"
             >
               Cancelar
             </button>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               form="dish-form"
               disabled={saving || Object.keys(formErrors).length > 0}
               className={`px-6 py-2 rounded-md focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors ${saving || Object.keys(formErrors).length > 0 ? 'bg-blue-300 cursor-not-allowed text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
